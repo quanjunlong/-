@@ -1,0 +1,114 @@
+# 0. 사용할 패키지 불러오기
+import keras
+import sys
+import tensorflow as tf
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.utils import np_utils
+import numpy as np
+print('Python version : ', sys.version)
+print('TensorFlow version : ', tf.__version__)
+print('Keras version : ', keras.__version__)
+
+# 랜덤시드 고정시키기
+np.random.seed(5)
+
+
+from keras import backend as K
+K.tensorflow_backend._get_available_gpus()
+
+import tensorflow as tf 
+sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+
+from tensorflow.python.client import device_lib 
+print(device_lib.list_local_devices()) 
+
+
+# 손실 이력 클래스 정의
+class LossHistory(keras.callbacks.Callback):
+    def init(self):
+        self.losses = []
+        
+    def on_epoch_end(self, batch, logs={}):
+        self.losses.append(logs.get('loss'))
+
+
+# 데이터셋 생성 함수        
+def seq2dataset(seq, window_size):
+    dataset = []
+    for i in range(len(seq)-window_size):
+        subset = seq[i:(i+window_size+1)]
+        dataset.append([code2idx[item] for item in subset])
+    return np.array(dataset)
+    
+    
+code2idx = {'c4':0, 'd4':1, 'e4':2, 'f4':3, 'g4':4, 'a4':5, 'b4':6,
+            'c8':7, 'd8':8, 'e8':9, 'f8':10, 'g8':11, 'a8':12, 'b8':13}
+
+idx2code = {0:'c4', 1:'d4', 2:'e4', 3:'f4', 4:'g4', 5:'a4', 6:'b4',
+            7:'c8', 8:'d8', 9:'e8', 10:'f8', 11:'g8', 12:'a8', 13:'b8'}
+            
+
+# 시퀀스 데이터 정의
+
+seq = ['g8', 'e8', 'e4', 'f8', 'd8', 'd4', 'c8', 'd8', 'e8', 'f8', 'g8', 'g8', 'g4',
+       'g8', 'e8', 'e8', 'e8', 'f8', 'd8', 'd4', 'c8', 'e8', 'g8', 'g8', 'e8', 'e8', 'e4',
+       'd8', 'd8', 'd8', 'd8', 'd8', 'e8', 'f4', 'e8', 'e8', 'e8', 'e8', 'e8', 'f8', 'g4',
+       'g8', 'e8', 'e4', 'f8', 'd8', 'd4', 'c8', 'e8', 'g8', 'g8', 'e8', 'e8', 'e4']
+       
+# 2. 데이터셋 생성하기
+dataset = seq2dataset(seq, window_size = 4)
+
+print(dataset.shape)
+print(dataset)
+
+# 입력(X)과 출력(Y) 변수로 분리하기
+x_train = dataset[:,0:4]
+y_train = dataset[:,4]
+
+max_idx_value = 13
+
+# 입력값 정규화 시키기
+x_train = x_train / float(max_idx_value)
+
+# 라벨값에 대한 one-hot 인코딩 수행
+y_train = np_utils.to_categorical(y_train)
+
+one_hot_vec_size = y_train.shape[1]
+
+print("one hot encoding vector size is ", one_hot_vec_size)
+
+
+
+# 3. 모델 구성하기
+import keras.backend.tensorflow_backend as K
+with K.tf.device('/gpu:0'):
+    model = Sequential()
+    model.add(Dense(512, input_dim=4, activation='relu'))
+    model.add(Dense(1024, activation='relu'))
+    model.add(Dense(2048, activation='relu'))
+    model.add(Dense(5012, activation='relu'))
+    model.add(Dense(2048, activation='relu'))
+    model.add(Dense(1024, activation='relu'))
+    model.add(Dense(512, activation='relu'))
+    model.add(Dense(one_hot_vec_size, activation='softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    history = LossHistory() # 손실 이력 객체 생성
+    history.init()
+    model.fit(x_train, y_train, epochs=10000, batch_size=10, verbose=2, callbacks=[history])
+    
+    
+ # 5. 모델 학습시키기
+model.fit(x_train, y_train, epochs=100000, batch_size=5, verbose=2, callbacks=[history])
+
+
+# 6. 학습과정 살펴보기
+%matplotlib inline
+import matplotlib.pyplot as plt
+
+plt.plot(history.losses)
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train'], loc='upper left')
+plt.show()
+       
